@@ -1,0 +1,99 @@
+
+
+version: "3.9"
+
+# networks: #This is used if you have a reverse proxy. I use Nginx Proxy Manager but anything will do
+#   proxy:
+#     external:
+#       name: proxy
+
+services:
+
+    gluetun:
+        image: qmcgaw/gluetun:latest
+        container_name: gluetun-stack
+        cap_add:
+            - NET_ADMIN
+        ports:
+            - 51820:51820/tcp
+            - 9005:9005
+            - 6882:6882
+            - 6882:6882/udp
+        volumes:
+            - ${HOME_DIR}/gluetun:/gluetun
+        environment:
+            - VPN_SERVICE_PROVIDER=surfshark
+            # - VPN_TYPE=wireguard
+            # - WIREGUARD_PRIVATE_KEY=WOr7o0yOGXnQFhgZS2U7YdhpDIE5VgwUAeMRK/7xUkg=
+            # - WIREGUARD_ADDRESSES=10.14.0.2
+            - OPENVPN_USER=b9WBPFUpSm7PdpwYgaUsTkh8
+            - OPENVPN_PASSWORD=qbdMyLDCKLxPkfGJQt5LtgT6
+            - SERVER_COUNTRIES=Singapore
+            - DOT=off
+
+        restart: unless-stopped
+
+    qbittorrent:
+        image: lscr.io/linuxserver/qbittorrent:libtorrentv1
+        container_name: qbittorrent-stack
+        labels:
+            - deunhealth.restart.on.unhealthy=true
+        environment:
+            - PUID=1000
+            - PGID=1000
+            - TZ=Etc/UTC
+            - WEBUI_PORT=9005
+            - TORRENTING_PORT=6882
+        healthcheck:
+            # https://github.com/qdm12/gluetun/issues/641#issuecomment-933856220
+            test: "curl -sf https://1.1.1.1/  || exit 1"
+            interval: 1m
+            timeout: 10s
+            retries: 1
+        volumes:
+            - ${HOME_DIR}/docker/configs/qbittorrent/appdata:/config
+            - ${HOME_DIR}/Drive/torrents:/downloads #optional
+        # network_mode: "host"
+        # ports:
+        #     - 9005:9005
+        #     - 6882:6882
+        #     - 6882:6882/udp
+        network_mode: "service:gluetun"
+        depends_on:
+            gluetun:
+                condition: service_healthy
+        logging:
+          driver: "local"
+
+        deploy:
+          resources:
+            reservations:
+              memory: 50m
+
+        restart: unless-stopped
+
+    #De-unhealth - used to restart qbitorrent if gluetun VPN tunnel ever drops
+    deunhealth:
+        build: .
+        image: qmcgaw/deunhealth
+        container_name: deunhealth-stack
+
+        environment:
+            - LOG_LEVEL=info
+            - HEALTH_SERVER_ADDRESS=127.0.0.1:9999
+            - TZ=Etc/UTC
+        restart: always
+        volumes:
+            - /var/run/docker.sock:/var/run/docker.sock
+
+
+    #Dozzle - Used to easily view logs of any container in real time!
+    dozzle:
+        container_name: dozzle-stack
+        image: amir20/dozzle:latest
+        volumes:
+            - /var/run/docker.sock:/var/run/docker.sock
+        ports:
+            - 9999:8080
+
+        restart: unless-stopped

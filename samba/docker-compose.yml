@@ -1,0 +1,49 @@
+---
+services:
+  samba:
+    image: ghcr.io/servercontainers/samba:latest
+    container_name: samba
+    restart: unless-stopped
+    cap_add:
+     - CAP_NET_ADMIN
+    environment:
+      ACCOUNT_main: ${MAIN_PASS}
+      UID_main: 1000
+      UID: 1000
+      GID: 1000
+      SAMBA_VOLUME_CONFIG_samba: "\
+
+       [global];\ 
+       disable netbios = yes;\ 
+       client ipc max protocol = SMB3;\ 
+       client ipc min protocol = SMB3;\ 
+       client max protocol = SMB3;\ 
+       client min protocol = SMB3;\ 
+       server max protocol = SMB3;\ 
+       server min protocol = SMB3;\ 
+
+       [main];\ 
+       path=/shares/location;\ 
+       available = yes;\ 
+       browsable = yes;\ 
+       writable = yes;\ 
+       read only = no;\ 
+       write cache size = 268435456;\ 
+       min receivefile size = 268435456;\ 
+       getwd cache = true;\ 
+
+       [home];\ 
+       path=/shares/location2;\ 
+       available = yes;\ 
+       browsable = yes;\ 
+       writable = yes;\ 
+       read only = no;\ 
+       force user;\ 
+       write cache size = 268435456;\ 
+       min receivefile size = 268435456;\ 
+       getwd cache = true;"
+    volumes:
+      - ${HOME_DIR}/Drive:/shares/location
+      - ${HOME_DIR}:/shares/location2
+    ports:
+      - 445:445

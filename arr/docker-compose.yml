@@ -1,0 +1,119 @@
+---
+version: "3"
+services:
+  vpn:
+    image: qmcgaw/gluetun
+    container_name: vpn
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - 8090:8090 # qbittorrent Web UI
+      - 6881:6881 # qbittorrent
+      - 6881:6881/udp # qbittorrent
+      - 8889:8889/tcp # Gluetun
+      - 9696:9696 # prowlarr
+      - 8989:8989 # sonarr
+      - 7878:7878 # radarr
+      
+    volumes:
+      - /volume1/docker/gluetun:/gluetun
+    environment:
+      #See https://github.com/qdm12/gluetun-wiki
+      - VPN_SERVICE_PROVIDER=surfshark # Set this to your provider https://github.com/qdm12/gluetun-wiki/tree/main/setup/providers
+      - VPN_TYPE=openvpn
+      # OpenVPN:
+      - OPENVPN_USER=b9WBPFUpSm7PdpwYgaUsTkh8
+      - OPENVPN_PASSWORD=qbdMyLDCKLxPkfGJQt5LtgT6
+      - SERVER_COUNTRIES=Singapore
+      # Timezone for accurate log times
+      - TZ=UTC/Etc
+      - UPDATER_PERIOD=24h
+    restart: unless-stopped
+
+  qbittorrent:
+    image: linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC/Etc
+      - WEBUI_PORT=8090
+    volumes:
+      - ${HOME_DIR}/docker/configs/qbittorrent-arr/config:/config
+      - ${HOME_DIR}/Drive/torrents/sonarr:/SeriesDownloads
+      - ${HOME_DIR}/Drive/torrents/radarr:/MovieDownloads
+    network_mode: service:vpn
+    healthcheck:
+      test: curl google.com || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+      
+
+  prowlarr:
+    image: hotio/prowlarr:latest
+    container_name: prowlarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=$TZ
+    volumes:
+      - ${HOME_DIR}/docker/configs/prowlarr/config:/config
+    restart: unless-stopped
+    network_mode: service:vpn
+    depends_on:
+      - vpn
+      - qbittorrent
+
+  jackett:
+    image: linuxserver/jackett:latest
+    container_name: vpn-jackett
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=$TZ
+    volumes:
+      - ${HOME_DIR}/docker/configs/jackett/config:/config
+    network_mode: service:vpn
+    healthcheck:
+      test: curl google.com || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  sonarr:
+    image: linuxserver/sonarr:latest
+    container_name: sonarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=$TZ
+    volumes:
+      - ${HOME_DIR}/docker/configs/sonarr/config:/config
+      - ${HOME_DIR}/Drive/torrents/sonarr:/SeriesDownloads
+    restart: unless-stopped
+    network_mode: service:vpn
+    depends_on:
+      - prowlarr
+      - qbittorrent
+      - vpn
+
+  radarr:
+    image: linuxserver/radarr:latest
+    container_name: radarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=$TZ
+    volumes:
+      - ${HOME_DIR}/docker/configs/radarr/config:/config
+      - ${HOME_DIR}/Drive/torrents/radarr:/MovieDownloads
+    restart: unless-stopped
+    network_mode: service:vpn
+    depends_on:
+      - prowlarr
+      - qbittorrent
+      - vpn
